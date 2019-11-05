@@ -100,20 +100,21 @@ class mobxArchive {
     try {
       stat = await this.archive.stat(path);
     } catch (err) {
-      console.warn(`read(${path}):`, err);
-      return stat; // should be false
+      console.warn(`read(${path}):`, err, stat);
+      return stat;
     }
-    console.log("stat", stat);
+    console.log("read() stat", stat);
     if (stat.isFile()) {
+      console.log("read() stat: isFile()==true", path);
       // this.fs["/dat.json"] = await this.archive.readFile("/dat.json", "utf8");
       if (path in this.files) {
-        console.log(path);
         return this.files[path];
       }
       this.fetchFile(path);
       return "fetching file " + path;
     }
     if (stat.isDirectory()) {
+      console.log("read() stat: isDirectory()==true", path);
       this.fs[path] = await this.archive.readdir("/", { stat: true });
     }
   }
