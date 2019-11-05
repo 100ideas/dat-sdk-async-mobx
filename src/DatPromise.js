@@ -1,16 +1,31 @@
 import React from "react";
-import { decorate, observable, action, computed, runInAction, flow, toJS, configure } from "mobx";
-import { useObserver } from "mobx-react";
+import { decorate, observable, action, computed, reaction, runInAction, flow, toJS, configure } from "mobx";
+import { observer, useObserver } from "mobx-react";
 
-// const SDK = require("./override/dat-sdk-promise");
+// const SDK = require("dat-sdk/promise");
 import SDK from "./override/dat-sdk-promise";
-const { DatArchive } = SDK();
 
 configure({ enforceActions: 'always' });
 
 // https://datbase.org/view?query=60c525b5589a5099aa3610a8ee550dcd454c3e118f7ac93b7d41b6b850272330
 const datFoundationKey =
   "dat://60c525b5589a5099aa3610a8ee550dcd454c3e118f7ac93b7d41b6b850272330";
+const DATPROJECT_KEY = 'dat://60c525b5589a5099aa3610a8ee550dcd454c3e118f7ac93b7d41b6b850272330'
+const DATPROJECT_URL = 'dat://dat.foundation'
+const TEST_TIMEOUT = 10 * 1000
+
+const datConfig = {
+  storageOpts: {
+    storageLocation: '/'
+  },
+  live: true
+}
+
+const isBrowser = process.title === 'browser'
+console.warn('isBrowser:', isBrowser)
+
+
+const { DatArchive } = SDK(datConfig);
 
 // async function getDefaultDat() {
 //   // const archive = await Hyperdrive.load("dat://dat.foundation");
@@ -51,32 +66,36 @@ class mobxArchive {
     this.key = discoveryKey
     this.archive = {}
     this.loaded = false
-    this.ready = false
+    this.syncs = 0
 
     this.fs = {}
     this.files = {}
 
     try {
       // const _archive = yield DatArchive.load(discoveryKey); // yield instead of await
-      this.archive = yield DatArchive.load(discoveryKey); // yield instead of await
+      // this.archive = yield DatArchive.load(discoveryKey); // yield instead of await
+      // this.archive = yield new DatArchive(discoveryKey); 
+      this.archive = yield DatArchive.load(DATPROJECT_KEY); 
+      // this.archive = yield DatArchive.fork(discoveryKey); 
       // this.loaded = yield this.archive._archive.ready
-      // console.log(this.archive)
       // action('initArchive', () => this.archive = _archive)
     
       this.addListeners();
       // const rootdl = yield this.archive.download('/')
 
-      // this.fs['/'] = yield this.archive.readdir("/")
+      this.fs['/'] = yield this.archive.readdir("/")
       // console.log(`this.fs['/']`, toJS(this.fs['/']))
       // console.log('root dl', rootdl)
       
       // console.log("\n\n\n", rootdir, "\n\n\n")
-      // this.files["/dat.json"] = yield this.archive.readFile("/dat.json");
+      this.files["/dat.json"] = yield this.archive.readFile("/dat.json");
+      // const datJson = this.archive.readFile('/dat.json', 'utf8')
+      // this.files['/dat.json'] = datJson
     } catch (error) {
       const msg = "error: initArchive() " + error.toString()
       console.log(msg)
     }
-    // this.loaded = true;
+    this.loaded = true;
   })
 
   constructor(discoveryKey = datFoundationKey) {
@@ -93,10 +112,6 @@ class mobxArchive {
     //   console.log(path, "has been invalidated, downloading the update");
     //   // this.archive.download(path);
     // });
-    evts.addEventListener("ready", async () => {
-      console.log("archive is READY!");
-      // this.read(path);
-    });
     // evts.addEventListener("changed", async ({ path }) => {
     //   console.log(path, "has been updated!");
     //   this.read(path);
@@ -110,10 +125,17 @@ class mobxArchive {
     // this.archive.addEventListener("upload", ({ feed, block, bytes }) => {
     //   console.log("Uploaded a block in the", feed, { block, bytes });
     // });
-    // this.archive.addEventListener("sync", ({ feed }) => {
-    //   console.log("Downloaded everything currently published in the", feed);
-    // });
+    this.archive.addEventListener("sync", ({ feed }) => {
+      runInAction(async () => this.syncs++)
+      console.log("Downloaded everything currently published in the", feed);
+    });
   }
+
+  watchSyncs = reaction(
+    () => this.syncs,
+    syncnum => { console.log("saw a sync event! ", syncnum, this.fs['/']); this.fetchRootFiles()},
+    {delay: 500}
+  )
 
   get lsroot() {
     return this.fs["/"] && this.fs["/"].toString();
@@ -121,7 +143,8 @@ class mobxArchive {
 
   updateInfo() {
     runInAction(async () => {
-      this._info = await this.archive.getInfo();
+      // this._info = await this.archive.getInfo();
+      this._info = {"note": "this.archive.getInfo() disabled"};
     });
   }
 
@@ -129,7 +152,7 @@ class mobxArchive {
     if (this.loaded) {
       // this.updateInfo()
     }
-    return this._info
+    return {...this._info, syncs: this.syncs }
   }
 
   get filesByNameArray() {
@@ -164,7 +187,10 @@ class mobxArchive {
     }
     if (stat.isDirectory()) {
       console.log("read() stat: isDirectory()==true", path);
-      this.fs[path] = await this.archive.readdir(path, { stat: true });
+      // this.fs[path] = await this.archive.readdir(path, { stat: true });
+      const newDirs = await this.archive.readdir(path)
+      runInAction( () => this.fs[path] = newDirs);
+      this.fetchDirFiles(path)
     }
   }
 
@@ -175,6 +201,30 @@ class mobxArchive {
     return res;
   }
 
+  // get fsToJs(){
+  //   return '/' in this.fs ? (this.fs['/']) : []
+  // }
+
+  async fetchRootFiles() {
+    // if(toJS(this.fs["/"]) !== 'array') {
+      if(this.fs["/"] && this.fs["/"].length) {
+      console.log('fetchRootFiles()', this.fs["/"])
+      this.fs["/"].map( name => {
+        this.read(name)
+      })
+    }
+  }
+
+  async fetchDirFiles(dir) {
+    // if(toJS(this.fs["/"]) !== 'array') {
+      if(this.fs[dir] && this.fs[dir].length) {
+      console.log('fetchDirFiles()', this.fs[dir])
+      this.fs[dir].map( name => {
+        // this.read(dir +'/'+ name)    // WORKS but is causing dat-node-sdk to timeout
+        this.archive.download(dir +'/'+ name)
+      })
+    }
+  }
 }
 decorate(mobxArchive, {
   key: observable,
@@ -184,14 +234,18 @@ decorate(mobxArchive, {
   fs: observable,
   loaded: observable,
   state: observable,
+  syncs: observable,
 
   lsroot: computed,
   archiveInfo: computed,
   filesByNameArray: computed,
+  // fsToJS: computed,
 
   initArchive: action,
   read: action,
   fetchFile: action,
+  fetchRootFiles: action,
+  fetchDirFiles: action, 
   firstRead: action,
   updateInfo: action
 });
