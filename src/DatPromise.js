@@ -14,11 +14,17 @@ const DATPROJECT_KEY = 'dat://60c525b5589a5099aa3610a8ee550dcd454c3e118f7ac93b7d
 const DATPROJECT_URL = 'dat://dat.foundation'
 const TEST_TIMEOUT = 10 * 1000
 
+const MY_TINY_DAT_KEY = 'dat://7ef15d1489c933f7555174cf24aa1025a2add81d6308310f7acd6937aa49dc6a'
+
 const datConfig = {
   storageOpts: {
     storageLocation: '/'
   },
-  live: true
+  // live: true, // stream duplexify error w/ DATPROJECT_KEY
+  eagerUpdate: true,
+  sparse: false,
+  download: true,
+  timeout: 30 * 1000
 }
 
 const isBrowser = process.title === 'browser'
@@ -27,38 +33,7 @@ console.warn('isBrowser:', isBrowser)
 
 const { DatArchive } = SDK(datConfig);
 
-// async function getDefaultDat() {
-//   // const archive = await Hyperdrive.load("dat://dat.foundation");
-//   const archive = await DatArchive.load(datFoundationKey);
-//   // const archive = await DatArchive.load("dat://dat.foundation");
-//   const someData = await archive.readFile("/dat.json", "utf8");
-//   console.log("Dat foundation dat.json:", someData);
-//   return someData;
-// }
-
 class mobxArchive {
-  // key = '';
-  // archive = false;
-  // _info = "not loaded";
-  // fs = {};
-  // files = {};
-  // loaded = false;
-  // key
-  // archive
-  // _info
-  // fs
-  // files
-  // loaded
-
-  // async firstRead() {
-  //   runInAction(async () => {
-  //     this.files["/dat.json"] = await this.archive.readFile("/dat.json");
-  //     this.loaded = true;
-  //   });
-  //   runInAction(async () => {
-  //     this.fs["/"] = await this.archive.readdir("/");
-  //   });
-  // }
 
   // https://mobx.js.org/best/actions.html#flows
   initArchive = flow(function*(discoveryKey) {
@@ -72,49 +47,32 @@ class mobxArchive {
     this.files = {}
 
     try {
-      // const _archive = yield DatArchive.load(discoveryKey); // yield instead of await
-      // this.archive = yield DatArchive.load(discoveryKey); // yield instead of await
-      // this.archive = yield new DatArchive(discoveryKey); 
-      this.archive = yield DatArchive.load(DATPROJECT_KEY); 
-      // this.archive = yield DatArchive.fork(discoveryKey); 
-      // this.loaded = yield this.archive._archive.ready
-      // action('initArchive', () => this.archive = _archive)
-    
+      this.archive = yield DatArchive.load(discoveryKey); 
       this.addListeners();
-      // const rootdl = yield this.archive.download('/')
-
       this.fs['/'] = yield this.archive.readdir("/")
-      // console.log(`this.fs['/']`, toJS(this.fs['/']))
-      // console.log('root dl', rootdl)
-      
-      // console.log("\n\n\n", rootdir, "\n\n\n")
-      this.files["/dat.json"] = yield this.archive.readFile("/dat.json");
-      // const datJson = this.archive.readFile('/dat.json', 'utf8')
-      // this.files['/dat.json'] = datJson
     } catch (error) {
-      const msg = "error: initArchive() " + error.toString()
+      const msg = `error: initArchive() (possibly 'this.archive.readdir("/")') ${error.toString()}`
+      console.log(msg)
+    }
+    try {
+      this.files["/dat.json"] = yield this.archive.readFile("/dat.json");
+    } catch (error) {
+      const msg = `error: initArchive() ('archive.readFile("/dat.json")') ${error.toString()}`
       console.log(msg)
     }
     this.loaded = true;
+    this._info = yield this.archive.getInfo()
   })
 
   constructor(discoveryKey = datFoundationKey) {
-    // action('setDiscoveryKey', () => this.key = discoveryKey)
-    // this.key = discoveryKey
-    // action('init', this.initArchive(discoveryKey));
     this.initArchive(discoveryKey)
   }
 
   addListeners() {
-    // let evts = archive.watch(['**/*.txt', '**/*.md'])
     let evts = this.archive.watch();
     // evts.addEventListener("invalidated", ({ path }) => {
     //   console.log(path, "has been invalidated, downloading the update");
     //   // this.archive.download(path);
-    // });
-    // evts.addEventListener("changed", async ({ path }) => {
-    //   console.log(path, "has been updated!");
-    //   this.read(path);
     // });
     // this.archive.addEventListener("network-changed", x => {
     //   console.log(x && x, "current peers");
@@ -129,11 +87,21 @@ class mobxArchive {
       runInAction(async () => this.syncs++)
       console.log("Downloaded everything currently published in the", feed);
     });
+    // TODO 
+    //   create reaction like syncs to track + debounce file changes, add toast notifications
+    // evts.addEventListener("changed", async ({ path }) => {
+    //   console.log(path, "has been updated!");
+    //   this.read(path);
+    // });    
   }
 
   watchSyncs = reaction(
     () => this.syncs,
-    syncnum => { console.log("saw a sync event! ", syncnum, this.fs['/']); this.fetchRootFiles()},
+    syncnum => { 
+      let msg = "saw a sync event! " + syncnum;  // access syncnum here so mobx will react to it changing
+      this.fetchRootFiles()
+      this.updateInfo()
+    },
     {delay: 500}
   )
 
@@ -141,26 +109,19 @@ class mobxArchive {
     return this.fs["/"] && this.fs["/"].toString();
   }
 
-  updateInfo() {
-    runInAction(async () => {
-      // this._info = await this.archive.getInfo();
-      this._info = {"note": "this.archive.getInfo() disabled"};
-    });
+  async updateInfo() {
+    console.log("updateinfo", this.archive)
+    let newInfo = this.archive.getInfo ? await this.archive.getInfo() : {'archiveInfo': 'somethins messed up'};
+    runInAction(async () => this._info = newInfo)
   }
 
   get archiveInfo() {
-    if (this.loaded) {
-      // this.updateInfo()
-    }
-    return {...this._info, syncs: this.syncs }
+    return this.loaded 
+      ? {...this._info, syncs: this.syncs }
+      : { archiveInfo: "still loading..." }
   }
 
   get filesByNameArray() {
-    // let stat = { stat: JSON.stringify(this.fs, null, 2)}
-    // let stat = [];
-    // stat = Object.keys(this.files).map(fn => [fn, this.files[fn].toString()]);
-    // return stat.length === 0 ? [["missing", "undefined"]] : stat;
-    // return stat.length === 0 ? [] : stat;
     return Object.keys(this.files).map(fn => [fn, this.files[fn].toString()]);
   }
 
@@ -173,12 +134,8 @@ class mobxArchive {
       console.log(`\tread(${path}):`, err.toString(), stat);
       return stat;
     }
-    console.log("read() stat", stat);
     if (stat.isFile()) {
-      console.log("read() stat: isFile()==true", path);
-      // this.fs["/dat.json"] = await this.archive.readFile("/dat.json", "utf8");
       if (path in this.files) {
-        console.log("found path in this.files", path);
         this.fetchFile(path);
         return this.files[path];
       }
@@ -186,8 +143,6 @@ class mobxArchive {
       return "fetching file " + path;
     }
     if (stat.isDirectory()) {
-      console.log("read() stat: isDirectory()==true", path);
-      // this.fs[path] = await this.archive.readdir(path, { stat: true });
       const newDirs = await this.archive.readdir(path)
       runInAction( () => this.fs[path] = newDirs);
       this.fetchDirFiles(path)
@@ -196,19 +151,12 @@ class mobxArchive {
 
   async fetchFile(path) {
     let res = await this.archive.readFile(path);
-    console.log("tried to get", path, "result:", res);
     runInAction( () => this.files[path] = res);
     return res;
   }
 
-  // get fsToJs(){
-  //   return '/' in this.fs ? (this.fs['/']) : []
-  // }
-
   async fetchRootFiles() {
-    // if(toJS(this.fs["/"]) !== 'array') {
       if(this.fs["/"] && this.fs["/"].length) {
-      console.log('fetchRootFiles()', this.fs["/"])
       this.fs["/"].map( name => {
         this.read(name)
       })
@@ -216,9 +164,7 @@ class mobxArchive {
   }
 
   async fetchDirFiles(dir) {
-    // if(toJS(this.fs["/"]) !== 'array') {
       if(this.fs[dir] && this.fs[dir].length) {
-      console.log('fetchDirFiles()', this.fs[dir])
       this.fs[dir].map( name => {
         // this.read(dir +'/'+ name)    // WORKS but is causing dat-node-sdk to timeout
         this.archive.download(dir +'/'+ name)
@@ -226,6 +172,7 @@ class mobxArchive {
     }
   }
 }
+
 decorate(mobxArchive, {
   key: observable,
   archive: observable,
@@ -250,7 +197,7 @@ decorate(mobxArchive, {
   updateInfo: action
 });
 
-const archive = new mobxArchive();
+const archive = new mobxArchive(MY_TINY_DAT_KEY);
 document.arc = archive;
 // archive.read();
 
@@ -268,7 +215,6 @@ export const DatComponent = () => {
       <h3>archive.fs:</h3> <pre>{JSON.stringify(archive.fs, null, 2)}</pre>
       <div>
         <h3>archive.files:</h3>
-        {/* <pre className="readfile">{JSON.stringify(archive.files, null, 2)}</pre> */}
         {archive.filesByNameArray.length > 0 ? (
           <ul>
             {/* {archive.filesAsJson.map( ({[name, content], idx}) => <li key={idx}> */}
@@ -283,7 +229,6 @@ export const DatComponent = () => {
           ""
         )}
       </div>
-      {/* <h3>archive.read():</h3> <pre>{JSON.stringify(archive.fs, null, 2)}</pre> */}
       <pre>archiveInfo: {JSON.stringify(archive.archiveInfo, null, 2)}</pre>
     </div>
   ));

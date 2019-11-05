@@ -34,10 +34,12 @@ const prompt = require("universal-prompt");
 const SDKcb = require("dat-sdk");
 
 // Gateways are hella slow so we'll have a crazy long timeout
-const API_TIMEOUT = 15 * 1000;
+// const API_TIMEOUT = 15 * 1000;
+const API_TIMEOUT = 36 * 1000;
 
 // How long to wait to get peers / sync with them
-const READY_DELAY = 3000;
+// const READY_DELAY = 3000;
+const READY_DELAY = 9000;
 
 const BASE_32_KEY_LENGTH = 52;
 
