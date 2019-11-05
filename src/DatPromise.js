@@ -197,9 +197,13 @@ decorate(mobxArchive, {
   updateInfo: action
 });
 
-const archive = new mobxArchive(MY_TINY_DAT_KEY);
+
+// test my own local dat
+// const archive = new mobxArchive(MY_TINY_DAT_KEY); 
+
+// uses dat-project website dat by default
+const archive = new mobxArchive(); 
 document.arc = archive;
-// archive.read();
 
 export const DatComponent = () => {
   // const archive = await Hyperdrive.load("dat://dat.foundation");
