@@ -1,12 +1,5 @@
 import React from "react";
-import {
-  decorate,
-  observable,
-  action,
-  computed,
-  runInAction,
-  toJS
-} from "mobx";
+import { decorate, observable, action, computed, runInAction } from "mobx";
 import { useObserver } from "mobx-react";
 
 const SDK = require("./override/dat-sdk-promise");
@@ -40,10 +33,14 @@ class mobxArchive {
       //   runInAction(async () => {
       //     this.fs = await this.archive.readFile("/dat.json");
       //   });
+
+      this.addListeners();
+
       runInAction(async () => {
-        this.fs = await this.archive.readFile("/dat.json");
-        // this.fs["/"] = await this.archive.readdir("/");
-        // this.files["/dat.json"] = await this.archive.readFile("/dat.json");
+        // this.fs = await this.archive.readFile("/dat.json");
+        this.files["/dat.json"] = await this.archive.readFile("/dat.json");
+        this.fs["/"] = await this.archive.readdir("/", { stat: true });
+
         // await this.firstRead();
         this.loaded = true;
       });
@@ -51,43 +48,79 @@ class mobxArchive {
     });
   }
 
+  addListeners() {
+    // let evts = archive.watch(['**/*.txt', '**/*.md'])
+    let evts = this.archive.watch();
+    // evts.addEventListener("invalidated", ({ path }) => {
+    //   console.log(path, "has been invalidated, downloading the update");
+    //   // this.archive.download(path);
+    // });
+    evts.addEventListener("changed", async ({ path }) => {
+      console.log(path, "has been updated!");
+      this.read(path);
+    });
+    this.archive.addEventListener("network-changed", x => {
+      console.log(x && x, "current peers");
+    });
+    // this.archive.addEventListener("download", ({ feed, block, bytes }) => {
+    //   console.log("Downloaded a block in the", feed, { block, bytes });
+    // });
+    // this.archive.addEventListener("upload", ({ feed, block, bytes }) => {
+    //   console.log("Uploaded a block in the", feed, { block, bytes });
+    // });
+    // this.archive.addEventListener("sync", ({ feed }) => {
+    //   console.log("Downloaded everything currently published in the", feed);
+    // });
+  }
+
   get lsroot() {
     return this.fs["/"] && this.fs["/"].toString();
   }
 
   get archiveInfo() {
-    runInAction(async () => {
-      this._info = await this.archive.getInfo();
-    });
-    return this._info;
-  }
-
-  get filesAsJson() {
-    // let stat = { stat: JSON.stringify(this.fs, null, 2)}
-    let stat = [];
-    stat = Object.keys(this.files).map(fn => {
-      // stat[fn] =
-      // stat.push([fn, this.files[fn].toString()]);
-      return [fn, this.files[fn].toString()];
-    });
-    return stat;
-  }
-
-  read(path) {
-    console.log("trying to get " + path);
-    // this.fs["/dat.json"] = await this.archive.readFile("/dat.json", "utf8");
-    if (path in this.files) {
-      console.log(path);
-      return this.files[path];
+    if (this.loaded) {
+      runInAction(async () => {
+        this._info = await this.archive.getInfo();
+      });
     }
-    this.fetchFile(path);
-    return "fetching...";
+  }
+
+  get filesByNameArray() {
+    // let stat = { stat: JSON.stringify(this.fs, null, 2)}
+    // let stat = [];
+    // stat = Object.keys(this.files).map(fn => [fn, this.files[fn].toString()]);
+    // return stat.length === 0 ? [["missing", "undefined"]] : stat;
+    // return stat.length === 0 ? [] : stat;
+    return Object.keys(this.files).map(fn => [fn, this.files[fn].toString()]);
+  }
+
+  async read(path) {
+    console.log("trying to get " + path);
+    let stat = false;
+    try {
+      stat = await this.archive.stat(path);
+    } catch (err) {
+      console.warn(`read(${path}):`, err);
+      return stat; // should be false
+    }
+    console.log("stat", stat);
+    if (stat.isFile()) {
+      // this.fs["/dat.json"] = await this.archive.readFile("/dat.json", "utf8");
+      if (path in this.files) {
+        console.log(path);
+        return this.files[path];
+      }
+      this.fetchFile(path);
+      return "fetching file " + path;
+    }
+    if (stat.isDirectory()) {
+      this.fs[path] = await this.archive.readdir("/", { stat: true });
+    }
   }
 
   async fetchFile(path) {
     let res = await this.archive.readFile(path);
-    console.log("tried to get ", res, "result:");
-    console.log(res);
+    console.log("tried to get", path, "result:", res);
     this.files[path] = res;
     return res;
   }
@@ -112,7 +145,7 @@ decorate(mobxArchive, {
 
   lsroot: computed,
   archiveInfo: computed,
-  filesAsJson: computed,
+  filesByNameArray: computed,
 
   read: action,
   fetchFile: action,
@@ -120,6 +153,7 @@ decorate(mobxArchive, {
 });
 
 const archive = new mobxArchive();
+document.arc = archive;
 // archive.read();
 
 export const DatComponent = () => {
@@ -136,11 +170,23 @@ export const DatComponent = () => {
       <h3>archive.fs:</h3> <pre>{JSON.stringify(archive.fs, null, 2)}</pre>
       <div>
         <h3>archive.files:</h3>
-        <pre className="readfile">{JSON.stringify(archive.files, null, 2)}</pre>
-        {console.log(archive.files)}
+        {/* <pre className="readfile">{JSON.stringify(archive.files, null, 2)}</pre> */}
+        {archive.filesByNameArray.length > 0 ? (
+          <ul>
+            {/* {archive.filesAsJson.map( ({[name, content], idx}) => <li key={idx}> */}
+            {archive.filesByNameArray.map(([name, content], idx) => (
+              <li key={idx}>
+                <h4>{name}</h4>
+                <pre>{content}</pre>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          ""
+        )}
       </div>
       {/* <h3>archive.read():</h3> <pre>{JSON.stringify(archive.fs, null, 2)}</pre> */}
-      {/* <pre>archiveInfo: {JSON.stringify(archive.archiveInfo, null, 2)}</pre> */}
+      <pre>archiveInfo: {JSON.stringify(archive.archiveInfo, null, 2)}</pre>
     </div>
   ));
 };
