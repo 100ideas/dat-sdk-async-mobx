@@ -43,7 +43,7 @@ const BASE_32_KEY_LENGTH = 52;
 
 const DAT_KEY_URL_REGEX = /^dat:\/\/[\dabcdef]{64}\/?$/i;
 
-module.exports = function SDK(opts) {
+export default function SDK(opts) {
   const { Hyperdrive, resolveName, destroy } = SDKcb(opts);
 
   function isLocal(key) {

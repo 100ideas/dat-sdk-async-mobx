@@ -2,11 +2,12 @@
 // https://github.com/beakerbrowser/node-dat-archive/blob/master/lib/const.js
 
 // url file paths
-exports.DAT_VALID_PATH_REGEX = /^[a-z0-9-._~!$&'()*+,;=:@/\s]+$/i;
+const DAT_VALID_PATH_REGEX = /^[a-z0-9-._~!$&'()*+,;=:@/\s]+$/i;
 
 // dat settings
-exports.DAT_MANIFEST_FILENAME = "dat.json";
-exports.DEFAULT_DAT_API_TIMEOUT = 5e3;
+const DAT_MANIFEST_FILENAME = "dat.json";
+const DEFAULT_DAT_API_TIMEOUT = 5e3;
+
 // ===========================================================================
 
 //////////////////////////////////////////////////////////////////////////////
@@ -15,9 +16,9 @@ exports.DEFAULT_DAT_API_TIMEOUT = 5e3;
 const { TimeoutError } = require("beaker-error-constants");
 const EventTarget = require("dom-event-target");
 
-// exports.datDns = require("dat-dns")();
+// const datDns = require("dat-dns")();
 
-exports.timer = function(ms, fn) {
+const timer = function(ms, fn) {
   var currentAction;
   var isTimedOut = false;
 
@@ -55,10 +56,18 @@ exports.timer = function(ms, fn) {
   });
 };
 
-exports.toEventTarget = function(es) {
+const toEventTarget = function(es) {
   var target = new EventTarget();
   es.on("data", ([event, args]) => target.send(event, args));
   target.close = es.destroy.bind(es);
   return target;
 };
 // ===========================================================================
+
+export { 
+  DAT_VALID_PATH_REGEX, 
+  DAT_MANIFEST_FILENAME, 
+  DEFAULT_DAT_API_TIMEOUT,
+  timer,
+  toEventTarget 
+}
