@@ -1,6 +1,7 @@
 # dat-sdk-async-mobx
 - this repo: https://github.com/100ideas/dat-sdk-async-mobx
 - license: MIT
+- try/edit demo on codesandbox: https://github.com/100ideas/dat-sdk-async-mobx/tree/codesandbox-v1
 
 looking forward to the unified (dat, beaker), isomorphic (client, browser), async-centric `dat api` under development as `dat-sdk`: https://github.com/datproject/sdk
 
