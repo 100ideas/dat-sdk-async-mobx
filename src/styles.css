@@ -1,0 +1,32 @@
+.App {
+  font-family: sans-serif;
+  max-width: 70vw;
+  margin: 1em auto;
+  text-align: left;
+}
+
+.header {
+  text-align: center;
+}
+
+pre.readfile {
+  text-align: left;
+  font-family: monospace;
+}
+
+.dat-header {
+  background-color: black;
+  color: white;
+  padding: 0.5em;
+}
+
+.dat-header small {
+  font-size: 16px;
+  margin-left: 2em;
+  padding: 5px;
+}
+
+.dat-header small.loading {
+  background-color: white;
+  color: black;
+}
